@@ -2,6 +2,9 @@ pub use nalgebra;
 use nalgebra::{distance_squared, Point, SMatrix, SVector};
 use thiserror::Error;
 
+#[cfg(any(test, feature = "bench"))]
+pub mod testing;
+
 type Precision = f32;
 
 // todo: dynamic dimensions, otherwise for python/wasm you need to compile every dimension explicitly
@@ -129,7 +132,8 @@ pub fn deform_affine<const D: usize>(
     transpose_mul(transpose_mul(point - vars.p_star.coords, mp_inv), mq) + vars.q_star.coords
 }
 
-enum MLSStrategy {
+#[derive(Debug, Copy, Clone)]
+pub enum MLSStrategy {
     Affine,
     // other strategies are only covered in 2D in the paper
 }
@@ -142,6 +146,7 @@ pub enum ConstructionError {
     NoControlPoints,
 }
 
+#[derive(Debug, Clone)]
 pub struct PointMLS<const D: usize> {
     controls_p: Vec<Point<Precision, D>>,
     controls_q: Vec<Point<Precision, D>>,
@@ -169,6 +174,18 @@ impl<const D: usize> PointMLS<D> {
         })
     }
 
+    pub fn controls_p(&self) -> &[Point<Precision, D>] {
+        &self.controls_p
+    }
+
+    pub fn controls_q(&self) -> &[Point<Precision, D>] {
+        &self.controls_q
+    }
+
+    pub fn strategy(&self) -> &MLSStrategy {
+        &self.strategy
+    }
+
     pub fn transform<P: Into<Point<Precision, D>>>(&self, p: P) -> [Precision; D] {
         match self.strategy {
             MLSStrategy::Affine => {
@@ -186,16 +203,16 @@ impl<const D: usize> PointMLS<D> {
     }
 }
 
-fn sum_p<const D: usize>(a: Point<Precision, D>, b: Point<Precision, D>) -> Point<Precision, D> {
-    a + b.coords
-}
+// fn sum_p<const D: usize>(a: Point<Precision, D>, b: Point<Precision, D>) -> Point<Precision, D> {
+//     a + b.coords
+// }
 
-fn sum_m<const D: usize>(
-    a: SMatrix<Precision, D, D>,
-    b: SMatrix<Precision, D, D>,
-) -> SMatrix<Precision, D, D> {
-    a + b
-}
+// fn sum_m<const D: usize>(
+//     a: SMatrix<Precision, D, D>,
+//     b: SMatrix<Precision, D, D>,
+// ) -> SMatrix<Precision, D, D> {
+//     a + b
+// }
 
 /// To look like reference impl's Point::transpose_mul(Mat2)
 /// Actually just matrix.transpose * vector
@@ -216,8 +233,26 @@ fn times_transpose<const D: usize>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testing::{assert_eq_sl, fake_points, make_rng, read_cps, ref_deform};
 
     #[test]
-    fn it_works() {
+    fn can_construct() {
+        let (c_p, c_q) = read_cps::<3>();
+        PointMLS::new(c_p, c_q).expect("Could not construct");
+    }
+
+    #[test]
+    fn vs_reference() {
+        let (c_p, c_q) = read_cps::<2>();
+        let mut rng = make_rng();
+        let orig = fake_points(&c_p, 100, &mut rng);
+
+        let ref_deformed = ref_deform(&c_p, &c_q, &orig);
+
+        let mls = PointMLS::new(c_p, c_q).expect("Could not construct");
+
+        let mls_deformed: Vec<_> = orig.iter().map(|p| mls.transform(*p)).collect();
+
+        assert_eq_sl(&mls_deformed, &ref_deformed)
     }
 }
