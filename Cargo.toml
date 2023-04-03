@@ -26,6 +26,7 @@ fastrand = { version = "1", optional = true }
 criterion = "0.3"
 # this activates the bench feature in development
 mlsnd = { path = ".", default-features = false, features = ["bench"] }
+cargo-release = "0.24"
 
 [features]
 bench = ["fastrand", "moving-least-squares"]
@@ -33,3 +34,6 @@ bench = ["fastrand", "moving-least-squares"]
 [[bench]]
 name = "benchmarks"
 harness = false
+
+[package.metadata.release]
+disable-publish = true
