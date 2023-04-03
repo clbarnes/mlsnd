@@ -1,3 +1,10 @@
+//! An implementation of the moving least squares point deformation algorithm
+//! ([Schaefer 2006](https://people.engr.tamu.edu/schaefer/research/mls.pdf)).
+//!
+//! The algorithm takes a set of control points in the origin space,
+//! and where those same points should end up in the target (deformed) space.
+//! Transformations for new points are calculated
+//! based on how close each control point is to the query point.
 pub use nalgebra;
 use nalgebra::{distance_squared, Point, RealField, SMatrix, SVector};
 use std::fmt::Debug;
@@ -6,17 +13,12 @@ use thiserror::Error;
 #[cfg(any(test, feature = "bench"))]
 pub mod testing;
 
+/// Trait covering the necessary features of `f32` and `f64` for use here
 pub trait Float: num_traits::Float + Debug + RealField {}
 
 impl Float for f32 {}
 
 impl Float for f64 {}
-
-// todo: dynamic dimensions, otherwise for python/wasm you need to compile every dimension explicitly
-// that said, explicit dimensions aren't verbose (they just might take up space)
-// pub type PointMLS2 = PointMLS<2>;
-// pub type PointMLS3 = PointMLS<3>;
-// pub type PointMLS4 = PointMLS<4>;
 
 struct Variables<T: Float, const D: usize> {
     pub w_all: Vec<T>,
@@ -86,6 +88,7 @@ impl<T: Float, const D: usize> VarOrPoint<T, D> {
     }
 }
 
+/// Free function for transforming a single point.
 pub fn deform_affine<T: Float, const D: usize>(
     controls_p: &[Point<T, D>],
     controls_q: &[Point<T, D>],
@@ -133,12 +136,23 @@ pub fn deform_affine<T: Float, const D: usize>(
     transpose_mul(transpose_mul(point - vars.p_star.coords, mp_inv), mq) + vars.q_star.coords
 }
 
+/// Variant of the MLS algorithm.
+/// Only Affine has a dimension-agnostic implementation in the paper,
+/// so that's all that's implemented here.
 #[derive(Debug, Copy, Clone)]
 pub enum MLSStrategy {
     Affine,
-    // other strategies are only covered in 2D in the paper
+    // Rigid,
+    // Similarity,
 }
 
+impl Default for MLSStrategy {
+    fn default() -> Self {
+        Self::Affine
+    }
+}
+
+/// `PointMLS` could not be built because of inappropriate control points (mismatched lengths or empty).
 #[derive(Error, Debug)]
 pub enum ConstructionError {
     #[error("Control point vectors have different lengths ({0}, {1})")]
@@ -147,6 +161,8 @@ pub enum ConstructionError {
     NoControlPoints,
 }
 
+/// Struct which holds all the information it needs to transform a point,
+/// in either direction.
 #[derive(Debug, Clone)]
 pub struct PointMLS<T: Float, const D: usize> {
     controls_p: Vec<Point<T, D>>,
@@ -155,6 +171,7 @@ pub struct PointMLS<T: Float, const D: usize> {
 }
 
 impl<T: Float, const D: usize> PointMLS<T, D> {
+    /// Build the transformer with the default MLS strategy (affine).
     pub fn new<P: Into<Point<T, D>>>(
         controls_p: Vec<P>,
         controls_q: Vec<P>,
@@ -171,22 +188,26 @@ impl<T: Float, const D: usize> PointMLS<T, D> {
         Ok(Self {
             controls_p: controls_p.into_iter().map(|p| p.into()).collect(),
             controls_q: controls_q.into_iter().map(|p| p.into()).collect(),
-            strategy: MLSStrategy::Affine,
+            strategy: MLSStrategy::default(),
         })
     }
 
+    /// Get a reference to the non-deformed control points.
     pub fn controls_p(&self) -> &[Point<T, D>] {
         &self.controls_p
     }
 
+    /// Get a reference to the deformed control points.
     pub fn controls_q(&self) -> &[Point<T, D>] {
         &self.controls_q
     }
 
+    /// Get a reference to the strategy used.
     pub fn strategy(&self) -> &MLSStrategy {
         &self.strategy
     }
 
+    /// Transform a point from the non-deformed space to the deformed space.
     pub fn transform<P: Into<Point<T, D>>>(&self, p: P) -> [T; D] {
         match self.strategy {
             MLSStrategy::Affine => {
@@ -195,6 +216,8 @@ impl<T: Float, const D: usize> PointMLS<T, D> {
         }
     }
 
+    /// Transform a point from the deformed space to the non-deformed space
+    /// (i.e. the reverse direction).
     pub fn transform_r<P: Into<Point<T, D>>>(&self, p: P) -> [T; D] {
         match self.strategy {
             MLSStrategy::Affine => {
@@ -203,17 +226,6 @@ impl<T: Float, const D: usize> PointMLS<T, D> {
         }
     }
 }
-
-// fn sum_p<const D: usize>(a: Point<Precision, D>, b: Point<Precision, D>) -> Point<Precision, D> {
-//     a + b.coords
-// }
-
-// fn sum_m<const D: usize>(
-//     a: SMatrix<Precision, D, D>,
-//     b: SMatrix<Precision, D, D>,
-// ) -> SMatrix<Precision, D, D> {
-//     a + b
-// }
 
 /// To look like reference impl's Point::transpose_mul(Mat2)
 /// Actually just matrix.transpose * vector
