@@ -4,15 +4,13 @@ use std::fs;
 use std::iter::repeat_with;
 use std::path::PathBuf;
 
-use crate::Precision;
-
 fn data_dir() -> PathBuf {
     let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     d.push("data");
     d
 }
 
-fn read_cp_rows() -> Vec<Vec<Precision>> {
+fn read_cp_rows() -> Vec<Vec<f32>> {
     let mut cp_path = data_dir();
     cp_path.push("control_points.csv");
     let contents = &fs::read_to_string(cp_path).expect("Couldn't read file")[..];
@@ -34,7 +32,7 @@ fn read_cp_rows() -> Vec<Vec<Precision>> {
     out
 }
 
-pub fn read_cps<const D: usize>() -> (Vec<[Precision; D]>, Vec<[Precision; D]>) {
+pub fn read_cps<const D: usize>() -> (Vec<[f32; D]>, Vec<[f32; D]>) {
     if D > 3 {
         panic!("Maximum dimensionality is 3");
     }

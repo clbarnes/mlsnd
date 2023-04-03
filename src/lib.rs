@@ -1,11 +1,16 @@
 pub use nalgebra;
-use nalgebra::{distance_squared, Point, SMatrix, SVector};
+use nalgebra::{distance_squared, Point, RealField, SMatrix, SVector};
+use std::fmt::Debug;
 use thiserror::Error;
 
 #[cfg(any(test, feature = "bench"))]
 pub mod testing;
 
-type Precision = f32;
+pub trait Float: num_traits::Float + Debug + RealField {}
+
+impl Float for f32 {}
+
+impl Float for f64 {}
 
 // todo: dynamic dimensions, otherwise for python/wasm you need to compile every dimension explicitly
 // that said, explicit dimensions aren't verbose (they just might take up space)
@@ -13,31 +18,27 @@ type Precision = f32;
 // pub type PointMLS3 = PointMLS<3>;
 // pub type PointMLS4 = PointMLS<4>;
 
-struct Variables<const D: usize> {
-    pub w_all: Vec<Precision>,
-    pub p_star: Point<Precision, D>,
-    pub q_star: Point<Precision, D>,
-    pub p_hat: Vec<Point<Precision, D>>,
+struct Variables<T: Float, const D: usize> {
+    pub w_all: Vec<T>,
+    pub p_star: Point<T, D>,
+    pub q_star: Point<T, D>,
+    pub p_hat: Vec<Point<T, D>>,
 }
 
-enum VarOrPoint<const D: usize> {
-    Var(Variables<D>),
-    Point(Point<Precision, D>),
+enum VarOrPoint<T: Float, const D: usize> {
+    Var(Variables<T, D>),
+    Point(Point<T, D>),
 }
 
-impl<const D: usize> VarOrPoint<D> {
-    pub fn new(
-        controls_p: &[Point<Precision, D>],
-        controls_q: &[Point<Precision, D>],
-        point: Point<Precision, D>,
-    ) -> Self {
+impl<T: Float, const D: usize> VarOrPoint<T, D> {
+    pub fn new(controls_p: &[Point<T, D>], controls_q: &[Point<T, D>], point: Point<T, D>) -> Self {
         let sqr_dist = |p| distance_squared(p, &point);
-        let weight = |p| 1.0 / sqr_dist(p);
-        let mut w_sum = 0.0;
+        let weight = |p| T::one() / sqr_dist(p);
+        let mut w_sum = T::zero();
         let mut w_all = Vec::with_capacity(controls_p.len());
 
-        let mut wp_star_sum = SVector::<_, D>::from_element(0.0);
-        let mut wq_star_sum = SVector::<_, D>::from_element(0.0);
+        let mut wp_star_sum = SVector::<_, D>::from_element(T::zero());
+        let mut wq_star_sum = SVector::<_, D>::from_element(T::zero());
 
         for (idx, (p, q)) in controls_p.iter().zip(controls_q.iter()).enumerate() {
             let w = weight(p);
@@ -85,18 +86,18 @@ impl<const D: usize> VarOrPoint<D> {
     }
 }
 
-pub fn deform_affine<const D: usize>(
-    controls_p: &[Point<Precision, D>],
-    controls_q: &[Point<Precision, D>],
-    point: Point<Precision, D>,
-) -> Point<Precision, D> {
+pub fn deform_affine<T: Float, const D: usize>(
+    controls_p: &[Point<T, D>],
+    controls_q: &[Point<T, D>],
+    point: Point<T, D>,
+) -> Point<T, D> {
     let vars = match VarOrPoint::new(controls_p, controls_q, point) {
         VarOrPoint::Var(v) => v,
         VarOrPoint::Point(p) => return p,
     };
 
-    let mut mp = SMatrix::<_, D, D>::from_element(0.0);
-    let mut mq = SMatrix::<_, D, D>::from_element(0.0);
+    let mut mp = SMatrix::<_, D, D>::from_element(T::zero());
+    let mut mq = SMatrix::<_, D, D>::from_element(T::zero());
 
     for ((w, p_h), q) in vars.w_all.iter().zip(vars.p_hat.iter()).zip(controls_q) {
         mp += &(times_transpose(&p_h.coords, &p_h.coords) * *w);
@@ -147,14 +148,14 @@ pub enum ConstructionError {
 }
 
 #[derive(Debug, Clone)]
-pub struct PointMLS<const D: usize> {
-    controls_p: Vec<Point<Precision, D>>,
-    controls_q: Vec<Point<Precision, D>>,
+pub struct PointMLS<T: Float, const D: usize> {
+    controls_p: Vec<Point<T, D>>,
+    controls_q: Vec<Point<T, D>>,
     strategy: MLSStrategy,
 }
 
-impl<const D: usize> PointMLS<D> {
-    pub fn new<P: Into<Point<Precision, D>>>(
+impl<T: Float, const D: usize> PointMLS<T, D> {
+    pub fn new<P: Into<Point<T, D>>>(
         controls_p: Vec<P>,
         controls_q: Vec<P>,
     ) -> Result<Self, ConstructionError> {
@@ -174,11 +175,11 @@ impl<const D: usize> PointMLS<D> {
         })
     }
 
-    pub fn controls_p(&self) -> &[Point<Precision, D>] {
+    pub fn controls_p(&self) -> &[Point<T, D>] {
         &self.controls_p
     }
 
-    pub fn controls_q(&self) -> &[Point<Precision, D>] {
+    pub fn controls_q(&self) -> &[Point<T, D>] {
         &self.controls_q
     }
 
@@ -186,7 +187,7 @@ impl<const D: usize> PointMLS<D> {
         &self.strategy
     }
 
-    pub fn transform<P: Into<Point<Precision, D>>>(&self, p: P) -> [Precision; D] {
+    pub fn transform<P: Into<Point<T, D>>>(&self, p: P) -> [T; D] {
         match self.strategy {
             MLSStrategy::Affine => {
                 deform_affine(&self.controls_p, &self.controls_q, p.into()).into()
@@ -194,7 +195,7 @@ impl<const D: usize> PointMLS<D> {
         }
     }
 
-    pub fn transform_r<P: Into<Point<Precision, D>>>(&self, p: P) -> [Precision; D] {
+    pub fn transform_r<P: Into<Point<T, D>>>(&self, p: P) -> [T; D] {
         match self.strategy {
             MLSStrategy::Affine => {
                 deform_affine(&self.controls_q, &self.controls_p, p.into()).into()
@@ -216,17 +217,14 @@ impl<const D: usize> PointMLS<D> {
 
 /// To look like reference impl's Point::transpose_mul(Mat2)
 /// Actually just matrix.transpose * vector
-fn transpose_mul<const D: usize>(
-    v: Point<Precision, D>,
-    m: SMatrix<Precision, D, D>,
-) -> Point<Precision, D> {
+fn transpose_mul<T: Float, const D: usize>(v: Point<T, D>, m: SMatrix<T, D, D>) -> Point<T, D> {
     m.transpose() * v
 }
 
-fn times_transpose<const D: usize>(
-    a: &SVector<Precision, D>,
-    b: &SVector<Precision, D>,
-) -> SMatrix<Precision, D, D> {
+fn times_transpose<T: Float, const D: usize>(
+    a: &SVector<T, D>,
+    b: &SVector<T, D>,
+) -> SMatrix<T, D, D> {
     a * b.transpose()
 }
 
