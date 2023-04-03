@@ -1,7 +1,16 @@
 [package]
 name = "mlsnd"
 version = "0.1.0"
+description = "Moving Least Squares deformations in N Dimensions"
+documentation = "https://docs.rs/mlsnd"
+readme = "README.md"
+homepage = "https://crates.io/mlsnd"
+repository = "https://github.com/clbarnes/mlsnd"
+license = "MIT"
 edition = "2021"
+authors = ["Chris L. Barnes <chrislloydbarnes@gmail.com>"]
+keywords = ["transformation", "geometry"]
+categories = ["multimedia::images", "science::geo", "mathematics", "graphics"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

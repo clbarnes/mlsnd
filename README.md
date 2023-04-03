@@ -12,3 +12,5 @@ Heavily inspired by the existing [`moving-least-squares`](https://crates.io/crat
 | Algorithm support | Affine, rigid, similarity | Affine only               |
 | Dependencies      | Fewer                     | More (mainly `nalgebra`)  |
 | Results (2D f32)  | Same (near enough)        | Same (near enough)        |
+
+The motivating paper only suggests a dimensionality-agnostic implementation for the affine case, although the other cases may be tractable for someone who is better than me at linear algebra.
