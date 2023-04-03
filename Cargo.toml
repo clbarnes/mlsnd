@@ -1,6 +1,6 @@
 [package]
 name = "mlsnd"
-version = "0.1.1-alpha.0"
+version = "0.1.1"
 description = "Moving Least Squares deformations in N Dimensions"
 documentation = "https://docs.rs/mlsnd"
 readme = "README.md"
